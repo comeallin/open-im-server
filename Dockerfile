@@ -1,5 +1,7 @@
-# Use Go 1.22 Alpine as the base image for building the application
-FROM golang:1.22-alpine AS builder
+ARG GO_IMAGE=golang:1.25-alpine
+
+# v3.8.3-patch.16 的 go.mod 要求 Go 1.25，构建层必须与源码契约一致。
+FROM ${GO_IMAGE} AS builder
 
 # Define the base directory for the application as an environment variable
 ENV SERVER_DIR=/openim-server
@@ -21,8 +23,11 @@ RUN go install github.com/magefile/mage@v1.15.0
 # Optionally build your application if needed
 RUN mage build
 
-# Using Alpine Linux with Go environment for the final image
-FROM golang:1.22-alpine
+# 运行阶段保留 Mage 所需的同主版本 Go 工具链。
+FROM ${GO_IMAGE}
+
+LABEL org.opencontainers.image.version="v3.8.3-patch.16-managed.1" \
+      com.comeallin.openim.contract="managed-group-v1"
 
 # Install necessary packages, such as bash
 RUN apk add --no-cache bash

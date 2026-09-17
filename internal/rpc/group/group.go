@@ -169,6 +169,13 @@ func (s *groupServer) CheckGroupAdmin(ctx context.Context, groupID string) error
 	return nil
 }
 
+func (s *groupServer) requireManagedGroupMutation(ctx context.Context) error {
+	if !authverify.IsAppManagerUid(ctx, s.config.Share.IMAdminUserID) {
+		return errs.ErrNoPermission.WrapMsg("managed group mutations require app manager")
+	}
+	return nil
+}
+
 func (s *groupServer) IsNotFound(err error) bool {
 	return errs.ErrRecordNotFound.Is(specialerror.ErrCode(errs.Unwrap(err)))
 }
@@ -203,6 +210,9 @@ func (s *groupServer) GenGroupID(ctx context.Context, groupID *string) error {
 }
 
 func (s *groupServer) CreateGroup(ctx context.Context, req *pbgroup.CreateGroupReq) (*pbgroup.CreateGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if req.GroupInfo.GroupType != constant.WorkingGroup {
 		return nil, errs.ErrArgs.WrapMsg(fmt.Sprintf("group type only supports %d", constant.WorkingGroup))
 	}
@@ -359,6 +369,9 @@ func (s *groupServer) GetJoinedGroupList(ctx context.Context, req *pbgroup.GetJo
 }
 
 func (s *groupServer) InviteUserToGroup(ctx context.Context, req *pbgroup.InviteUserToGroupReq) (*pbgroup.InviteUserToGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if len(req.InvitedUserIDs) == 0 {
 		return nil, errs.ErrArgs.WrapMsg("user empty")
 	}
@@ -536,6 +549,9 @@ func (s *groupServer) GetGroupMemberList(ctx context.Context, req *pbgroup.GetGr
 }
 
 func (s *groupServer) KickGroupMember(ctx context.Context, req *pbgroup.KickGroupMemberReq) (*pbgroup.KickGroupMemberResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	group, err := s.db.TakeGroup(ctx, req.GroupID)
 	if err != nil {
 		return nil, err
@@ -823,6 +839,9 @@ func (s *groupServer) getGroupsInfo(ctx context.Context, groupIDs []string) ([]*
 }
 
 func (s *groupServer) GroupApplicationResponse(ctx context.Context, req *pbgroup.GroupApplicationResponseReq) (*pbgroup.GroupApplicationResponseResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if !datautil.Contain(req.HandleResult, constant.GroupResponseAgree, constant.GroupResponseRefuse) {
 		return nil, errs.ErrArgs.WrapMsg("HandleResult unknown")
 	}
@@ -905,6 +924,9 @@ func (s *groupServer) GroupApplicationResponse(ctx context.Context, req *pbgroup
 }
 
 func (s *groupServer) JoinGroup(ctx context.Context, req *pbgroup.JoinGroupReq) (*pbgroup.JoinGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	user, err := s.userClient.GetUserInfo(ctx, req.InviterUserID)
 	if err != nil {
 		return nil, err
@@ -995,7 +1017,14 @@ func (s *groupServer) QuitGroup(ctx context.Context, req *pbgroup.QuitGroupReq) 
 		return nil, err
 	}
 	if member.RoleLevel == constant.GroupOwner {
-		return nil, errs.ErrNoPermission.WrapMsg("group owner can't quit")
+		memberCount, countErr := s.db.FindGroupMemberNum(ctx, req.GroupID)
+		if countErr != nil {
+			return nil, countErr
+		}
+		// 受控群允许最后一名群主退出并保留空群；仍禁止群主在有其他成员时绕过所有权转移。
+		if memberCount != 1 {
+			return nil, errs.ErrNoPermission.WrapMsg("group owner can't quit while other members remain")
+		}
 	}
 	if err := s.PopulateGroupMember(ctx, member); err != nil {
 		return nil, err
@@ -1028,6 +1057,9 @@ func (s *groupServer) setMemberJoinSeq(ctx context.Context, groupID string, user
 }
 
 func (s *groupServer) SetGroupInfo(ctx context.Context, req *pbgroup.SetGroupInfoReq) (*pbgroup.SetGroupInfoResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	var opMember *model.GroupMember
 	if !authverify.IsAppManagerUid(ctx, s.config.Share.IMAdminUserID) {
 		var err error
@@ -1121,6 +1153,9 @@ func (s *groupServer) SetGroupInfo(ctx context.Context, req *pbgroup.SetGroupInf
 }
 
 func (s *groupServer) SetGroupInfoEx(ctx context.Context, req *pbgroup.SetGroupInfoExReq) (*pbgroup.SetGroupInfoExResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	var opMember *model.GroupMember
 
 	if !authverify.IsAppManagerUid(ctx, s.config.Share.IMAdminUserID) {
@@ -1236,6 +1271,9 @@ func (s *groupServer) SetGroupInfoEx(ctx context.Context, req *pbgroup.SetGroupI
 }
 
 func (s *groupServer) TransferGroupOwner(ctx context.Context, req *pbgroup.TransferGroupOwnerReq) (*pbgroup.TransferGroupOwnerResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	group, err := s.db.TakeGroup(ctx, req.GroupID)
 	if err != nil {
 		return nil, err
@@ -1418,6 +1456,9 @@ func (s *groupServer) GetUserReqApplicationList(ctx context.Context, req *pbgrou
 }
 
 func (s *groupServer) DismissGroup(ctx context.Context, req *pbgroup.DismissGroupReq) (*pbgroup.DismissGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	owner, err := s.db.TakeGroupOwner(ctx, req.GroupID)
 	if err != nil {
 		return nil, err
@@ -1471,6 +1512,9 @@ func (s *groupServer) DismissGroup(ctx context.Context, req *pbgroup.DismissGrou
 }
 
 func (s *groupServer) MuteGroupMember(ctx context.Context, req *pbgroup.MuteGroupMemberReq) (*pbgroup.MuteGroupMemberResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	member, err := s.db.TakeGroupMember(ctx, req.GroupID, req.UserID)
 	if err != nil {
 		return nil, err
@@ -1505,6 +1549,9 @@ func (s *groupServer) MuteGroupMember(ctx context.Context, req *pbgroup.MuteGrou
 }
 
 func (s *groupServer) CancelMuteGroupMember(ctx context.Context, req *pbgroup.CancelMuteGroupMemberReq) (*pbgroup.CancelMuteGroupMemberResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	member, err := s.db.TakeGroupMember(ctx, req.GroupID, req.UserID)
 	if err != nil {
 		return nil, err
@@ -1545,6 +1592,9 @@ func (s *groupServer) CancelMuteGroupMember(ctx context.Context, req *pbgroup.Ca
 }
 
 func (s *groupServer) MuteGroup(ctx context.Context, req *pbgroup.MuteGroupReq) (*pbgroup.MuteGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if err := s.CheckGroupAdmin(ctx, req.GroupID); err != nil {
 		return nil, err
 	}
@@ -1556,6 +1606,9 @@ func (s *groupServer) MuteGroup(ctx context.Context, req *pbgroup.MuteGroupReq) 
 }
 
 func (s *groupServer) CancelMuteGroup(ctx context.Context, req *pbgroup.CancelMuteGroupReq) (*pbgroup.CancelMuteGroupResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if err := s.CheckGroupAdmin(ctx, req.GroupID); err != nil {
 		return nil, err
 	}
@@ -1567,6 +1620,9 @@ func (s *groupServer) CancelMuteGroup(ctx context.Context, req *pbgroup.CancelMu
 }
 
 func (s *groupServer) SetGroupMemberInfo(ctx context.Context, req *pbgroup.SetGroupMemberInfoReq) (*pbgroup.SetGroupMemberInfoResp, error) {
+	if err := s.requireManagedGroupMutation(ctx); err != nil {
+		return nil, err
+	}
 	if len(req.Members) == 0 {
 		return nil, errs.ErrArgs.WrapMsg("members empty")
 	}
