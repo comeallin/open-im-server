@@ -21,7 +21,7 @@ func TestGroupRequestHandlerUpdate(t *testing.T) {
 		t.Fatal("handler update contains obsolete handle_msg field")
 	}
 	want := map[string]any{
-		"handled_msg": "approved", "handle_result": constant.GroupResponseAgree,
+		"handled_msg": "approved", "handle_result": int32(constant.GroupResponseAgree),
 		"handle_user_id": "admin", "handled_time": handledTime,
 	}
 	for key, expected := range want {
