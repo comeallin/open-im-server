@@ -115,14 +115,15 @@ func (m *msgServer) messageVerification(ctx context.Context, data *msg.SendMsgRe
 			}
 			return err
 		}
+		// 受控只读群对群主、管理员和普通成员执行同一发送禁令；App Manager 与系统通知已在上方放行。
+		if groupInfo.Status == constant.GroupStatusMuted {
+			return servererrs.ErrMutedGroup.Wrap()
+		}
 		if groupMemberInfo.RoleLevel == constant.GroupOwner {
 			return nil
 		} else {
 			if groupMemberInfo.MuteEndTime >= time.Now().UnixMilli() {
 				return servererrs.ErrMutedInGroup.Wrap()
-			}
-			if groupInfo.Status == constant.GroupStatusMuted && groupMemberInfo.RoleLevel != constant.GroupAdmin {
-				return servererrs.ErrMutedGroup.Wrap()
 			}
 		}
 		return nil
