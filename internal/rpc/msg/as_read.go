@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	cbapi "github.com/openimsdk/open-im-server/v3/pkg/callbackstruct"
 	"github.com/openimsdk/protocol/constant"
 	"github.com/openimsdk/protocol/msg"
@@ -29,6 +30,9 @@ import (
 )
 
 func (m *msgServer) GetConversationsHasReadAndMaxSeq(ctx context.Context, req *msg.GetConversationsHasReadAndMaxSeqReq) (*msg.GetConversationsHasReadAndMaxSeqResp, error) {
+	if err := authverify.CheckAccessV3(ctx, req.UserID, m.config.Share.IMAdminUserID); err != nil {
+		return nil, err
+	}
 	var conversationIDs []string
 	if len(req.ConversationIDs) == 0 {
 		var err error
@@ -75,21 +79,34 @@ func (m *msgServer) GetConversationsHasReadAndMaxSeq(ctx context.Context, req *m
 }
 
 func (m *msgServer) SetConversationHasReadSeq(ctx context.Context, req *msg.SetConversationHasReadSeqReq) (*msg.SetConversationHasReadSeqResp, error) {
+	if err := authverify.CheckAccessV3(ctx, req.UserID, m.config.Share.IMAdminUserID); err != nil {
+		return nil, err
+	}
 	maxSeq, err := m.MsgDatabase.GetMaxSeq(ctx, req.ConversationID)
 	if err != nil {
 		return nil, err
 	}
-	if req.HasReadSeq > maxSeq {
-		return nil, errs.ErrArgs.WrapMsg("hasReadSeq must not be bigger than maxSeq")
-	}
-	if err := m.MsgDatabase.SetHasReadSeq(ctx, req.UserID, req.ConversationID, req.HasReadSeq); err != nil {
+	current, err := m.MsgDatabase.GetHasReadSeq(ctx, req.UserID, req.ConversationID)
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
+	}
+	advance, err := validateReadPosition(current, req.HasReadSeq, maxSeq)
+	if err != nil {
+		return nil, err
+	}
+	if advance {
+		if err := m.MsgDatabase.SetHasReadSeq(ctx, req.UserID, req.ConversationID, req.HasReadSeq); err != nil {
+			return nil, err
+		}
 	}
 	m.sendMarkAsReadNotification(ctx, req.ConversationID, constant.SingleChatType, req.UserID, req.UserID, nil, req.HasReadSeq)
 	return &msg.SetConversationHasReadSeqResp{}, nil
 }
 
 func (m *msgServer) MarkMsgsAsRead(ctx context.Context, req *msg.MarkMsgsAsReadReq) (*msg.MarkMsgsAsReadResp, error) {
+	if err := authverify.CheckAccessV3(ctx, req.UserID, m.config.Share.IMAdminUserID); err != nil {
+		return nil, err
+	}
 	if len(req.Seqs) < 1 {
 		return nil, errs.ErrArgs.WrapMsg("seqs must not be empty")
 	}
@@ -132,6 +149,9 @@ func (m *msgServer) MarkMsgsAsRead(ctx context.Context, req *msg.MarkMsgsAsReadR
 }
 
 func (m *msgServer) MarkConversationAsRead(ctx context.Context, req *msg.MarkConversationAsReadReq) (*msg.MarkConversationAsReadResp, error) {
+	if err := authverify.CheckAccessV3(ctx, req.UserID, m.config.Share.IMAdminUserID); err != nil {
+		return nil, err
+	}
 	conversation, err := m.ConversationLocalCache.GetConversation(ctx, req.UserID, req.ConversationID)
 	if err != nil {
 		return nil, err
@@ -199,6 +219,17 @@ func (m *msgServer) MarkConversationAsRead(ctx context.Context, req *msg.MarkCon
 		m.webhookAfterGroupMsgRead(ctx, &m.config.WebhooksConfig.AfterGroupMsgRead, reqCall)
 	}
 	return &msg.MarkConversationAsReadResp{}, nil
+}
+
+// validateReadPosition 保证多端同步只推进读位点，避免旧设备把未读数重新抬高。
+func validateReadPosition(current, requested, max int64) (bool, error) {
+	if requested > max {
+		return false, errs.ErrArgs.WrapMsg("hasReadSeq must not be bigger than maxSeq")
+	}
+	if requested < current {
+		return false, errs.ErrArgs.WrapMsg("hasReadSeq must not move backwards")
+	}
+	return requested > current, nil
 }
 
 func (m *msgServer) sendMarkAsReadNotification(ctx context.Context, conversationID string, sessionType int32, sendID, recvID string, seqs []int64, hasReadSeq int64) {

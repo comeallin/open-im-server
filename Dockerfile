@@ -26,8 +26,8 @@ RUN mage build
 # 运行阶段保留 Mage 所需的同主版本 Go 工具链。
 FROM ${GO_IMAGE}
 
-LABEL org.opencontainers.image.version="v3.8.3-patch.16-managed.2" \
-      com.comeallin.openim.contract="managed-group-v2"
+LABEL org.opencontainers.image.version="v3.8.3-patch.16-managed.4" \
+      com.comeallin.openim.contract="managed-group-v4"
 
 # Install necessary packages, such as bash
 RUN apk add --no-cache bash

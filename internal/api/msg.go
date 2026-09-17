@@ -365,6 +365,11 @@ func (m *MessageApi) GetActiveGroup(c *gin.Context) {
 }
 
 func (m *MessageApi) SearchMsg(c *gin.Context) {
+	// 全局消息检索会跨用户读取内容，只允许平台管理令牌调用。
+	if !authverify.IsAppManagerUid(c, m.imAdminUserID) {
+		apiresp.GinError(c, errs.ErrNoPermission.WrapMsg("only app manager can search messages"))
+		return
+	}
 	a2r.Call(c, msg.MsgClient.SearchMessage, m.Client)
 }
 

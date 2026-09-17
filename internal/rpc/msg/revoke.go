@@ -59,6 +59,9 @@ func (m *msgServer) RevokeMsg(ctx context.Context, req *msg.RevokeMsgReq) (*msg.
 	if msgs[0].ContentType == constant.MsgRevokeNotification {
 		return nil, servererrs.ErrMsgAlreadyRevoke.WrapMsg("msg already revoke")
 	}
+	if err := validateManagedRevoke(req.UserID, msgs[0], time.Now()); err != nil {
+		return nil, err
+	}
 
 	data, _ := json.Marshal(msgs[0])
 	log.ZDebug(ctx, "GetMsgBySeqs", "conversationID", req.ConversationID, "seq", req.Seq, "msg", string(data))
@@ -130,4 +133,19 @@ func (m *msgServer) RevokeMsg(ctx context.Context, req *msg.RevokeMsgReq) (*msg.
 	m.notificationSender.NotificationWithSessionType(ctx, req.UserID, recvID, constant.MsgRevokeNotification, msgs[0].SessionType, &tips)
 	m.webhookAfterRevokeMsg(ctx, &m.config.WebhooksConfig.AfterRevokeMsg, req)
 	return &msg.RevokeMsgResp{}, nil
+}
+
+const managedRevokeWindow = 120 * time.Second
+
+// validateManagedRevoke 把撤回约束放在 OpenIM 服务端，避免客户端或群角色绕过业务入口。
+func validateManagedRevoke(userID string, message *sdkws.MsgData, now time.Time) error {
+	if message == nil || message.SendID != userID {
+		return errs.ErrNoPermission.WrapMsg("only the message author can revoke")
+	}
+	sentAt := time.UnixMilli(message.SendTime)
+	age := now.Sub(sentAt)
+	if age < 0 || age > managedRevokeWindow {
+		return errs.ErrNoPermission.WrapMsg("message revoke window expired")
+	}
+	return nil
 }
