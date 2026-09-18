@@ -1,14 +1,14 @@
-url: http://127.0.0.1:10006/callbackExample
+url: http://message-api:8080/internal/v1/openim
 beforeSendSingleMsg:
-  enable: false
+  enable: true
   timeout: 5
-  failedContinue: true
+  failedContinue: false
   # Only the contentType in allowedTypes will send the callback.
   # Supports two formats: a single type or a range. The range is defined by the lower and upper bounds connected with a hyphen ("-").
   # e.g. allowedTypes: [1, 100, 200-500, 600-700] means that only contentType within the range
   # {1, 100} ∪ [200, 500] ∪ [600, 700] will be allowed through the filter.
   # If not set, all contentType messages will through this filter.
-  allowedTypes: []
+  allowedTypes: [101, 110]
   # Only the contentType not in deniedTypes will send the callback.
   # Supports two formats, same as allowedTypes.
   # If not set, all contentType messages will through this filter.
@@ -21,20 +21,20 @@ afterUpdateUserInfoEx:
   enable:  false
   timeout: 5
 afterSendSingleMsg:
-  enable: false
+  enable: true
   timeout: 5
   # Only the senID/recvID specified in attentionIds will send the callback
   # if not set, all user messages will be callback
   attentionIds: []
   # See beforeSendSingleMsg comment.
-  allowedTypes: []
+  allowedTypes: [101, 110]
   deniedTypes: []
 beforeSendGroupMsg:
-  enable: false
+  enable: true
   timeout: 5
-  failedContinue: true
+  failedContinue: false
   # See beforeSendSingleMsg comment.
-  allowedTypes: []
+  allowedTypes: [101, 110]
   deniedTypes: []
 beforeMsgModify:
   enable: false
@@ -44,10 +44,10 @@ beforeMsgModify:
   allowedTypes: []
   deniedTypes: []
 afterSendGroupMsg:
-  enable: false
+  enable: true
   timeout: 5
   # See beforeSendSingleMsg comment.
-  allowedTypes: []
+  allowedTypes: [101, 110]
   deniedTypes: []
 afterUserOnline:
   enable: false
@@ -113,10 +113,10 @@ beforeApplyJoinGroup:
   timeout: 5
   failedContinue: true
 afterGroupMsgRead:
-  enable: false
+  enable: true
   timeout: 5
 afterSingleMsgRead:
-  enable: false
+  enable: true
   timeout: 5
 beforeUserRegister:
   enable: false
@@ -160,7 +160,7 @@ beforeSetGroupInfoEx:
   timeout: 5
   failedContinue: true
 afterRevokeMsg:
-  enable: false
+  enable: true
   timeout: 5
 beforeAddBlack:
   enable: false

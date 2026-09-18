@@ -24,7 +24,18 @@ func TestLoadWebhooksConfig(t *testing.T) {
 	err := LoadConfig("../../../config/webhooks.yml", "IMENV_WEBHOOKS", &webhooks)
 	assert.Nil(t, err)
 	assert.Equal(t, 5, webhooks.BeforeAddBlack.Timeout)
-
+	assert.Equal(t, "http://message-api:8080/internal/v1/openim", webhooks.URL)
+	assert.True(t, webhooks.BeforeSendSingleMsg.Enable)
+	assert.False(t, webhooks.BeforeSendSingleMsg.FailedContinue)
+	assert.Equal(t, []string{"101", "110"}, webhooks.BeforeSendSingleMsg.AllowedTypes)
+	assert.True(t, webhooks.AfterSendSingleMsg.Enable)
+	assert.True(t, webhooks.BeforeSendGroupMsg.Enable)
+	assert.False(t, webhooks.BeforeSendGroupMsg.FailedContinue)
+	assert.Equal(t, []string{"101", "110"}, webhooks.BeforeSendGroupMsg.AllowedTypes)
+	assert.True(t, webhooks.AfterSendGroupMsg.Enable)
+	assert.True(t, webhooks.AfterSingleMsgRead.Enable)
+	assert.True(t, webhooks.AfterGroupMsgRead.Enable)
+	assert.True(t, webhooks.AfterRevokeMsg.Enable)
 }
 
 func TestLoadOpenIMRpcUserConfig(t *testing.T) {
