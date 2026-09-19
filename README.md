@@ -1,3 +1,105 @@
+## ComeAllIn 托管版本维护规则
+
+本仓库是 [OpenIM Server 官方仓库](https://github.com/openimsdk/open-im-server)的 ComeAllIn Fork。`managed/main` 是 ComeAllIn 定制版本唯一的长期演进基线；生产镜像只能从该基线上的不可变 `v<upstream>-managed.<revision>` 标签构建，不能从官方 `main`、功能分支或浮动标签构建。
+
+### 当前基线
+
+| 项目 | 当前值 |
+| --- | --- |
+| 官方源码基线 | `v3.8.3-patch.16` / `f6411a8` |
+| ComeAllIn 基线分支 | `managed/main` |
+| 当前托管提交 | `b5f117f` |
+| 当前发布标签 | `v3.8.3-patch.16-managed.5` |
+| 镜像契约 | `com.comeallin.openim.contract=managed-group-v5` |
+
+官方基线之上的定制提交按依赖顺序维护：
+
+1. `f6935f5`：受控群生命周期与空群保留；
+2. `1600f44`：关闭群后所有普通角色统一禁写；
+3. `b154f05`：历史访问身份、读位点单调性及作者 120 秒撤回；
+4. `ea97ac8`：物理消息删除仅允许 App Manager；
+5. `b5f117f`：发送、已读和撤回 Webhook 业务闭环。
+
+### 远端与分支职责
+
+本地维护仓库必须配置两个远端：
+
+```text
+origin   git@github.com:comeallin/open-im-server.git
+upstream https://github.com/openimsdk/open-im-server.git
+```
+
+| 分支或标签 | 职责 |
+| --- | --- |
+| `upstream/main` 和官方 tags | 只读的官方源码与发布依据 |
+| Fork 的 `main` | 保留官方同步关系，不接收 ComeAllIn 定制提交 |
+| `managed/main` | 官方修复与 ComeAllIn 修改最终汇合的长期基线，禁止强制推送 |
+| `codex/*`、`fix/*`、`feat/*` | 从 `managed/main` 创建的短期修改分支，通过 PR 回到 `managed/main` |
+| `upgrade/*` | 合并指定官方 tag 的临时升级分支，通过完整验证后回到 `managed/main` |
+| `release/<line>-managed` | 仅在需要并行维护多个版本线时创建，不为每次发布创建分支 |
+| `v<upstream>-managed.<revision>` | 不可变发布标签，是镜像构建和回滚的唯一源码身份 |
+
+### 日常修改
+
+所有 ComeAllIn 修改都从最新 `managed/main` 开始：
+
+```bash
+git fetch origin
+git switch managed/main
+git pull --ff-only origin managed/main
+git switch -c <type>/<change-name>
+```
+
+修改完成后通过 PR 合并回 `managed/main`。不得直接向 `managed/main` 强制推送，不得把定制提交写入 Fork 的 `main`，也不得在版本化发布分支上继续日常开发。
+
+### 合并官方修复
+
+普通升级固定到明确的官方 tag，不直接合并浮动的 `upstream/main`。例如升级到 `v3.8.3-patch.17`：
+
+```bash
+git fetch upstream --tags
+git switch managed/main
+git pull --ff-only origin managed/main
+git switch -c upgrade/v3.8.3-patch.17
+git merge --no-ff v3.8.3-patch.17
+```
+
+解决冲突后必须保留 merge commit，使 Git 历史同时记录旧托管基线和新官方基线。只有单个、边界明确且不能等待版本升级的官方安全或缺陷修复，才允许在升级分支 `cherry-pick <upstream-commit>`；仍须通过 PR 合并到 `managed/main` 并记录官方提交 SHA。
+
+升级不能只以“能够编译”为完成标准。任何涉及以下文件的官方变化都必须逐条复核对应业务契约：
+
+- `internal/rpc/group/group.go`：受控群变更、退出和空群保留；
+- `internal/rpc/msg/verify.go`：关闭群统一禁写；
+- `internal/rpc/msg/as_read.go`：请求身份和读位点单调性；
+- `internal/rpc/msg/sync_msg.go`：历史读取身份；
+- `internal/rpc/msg/revoke.go`：仅作者且 120 秒内撤回；
+- `internal/rpc/msg/delete.go`：物理删除仅 App Manager；
+- `internal/api/msg.go`：全局检索仅 App Manager；
+- `config/webhooks.yml`、`deployments/deploy/openim-config.yml`：`be-message` 回调地址、事件开关及发送前 fail-closed。
+
+### 验证与发布
+
+合并到 `managed/main` 前至少完成：
+
+1. OpenIM 官方单元测试与相关 E2E；
+2. 读位点、撤回和 Webhook 配置回归测试；
+3. 使用普通用户 Token 直接访问 HTTP/WSS 的旁路测试，确认不能绕过群管理、历史、撤回、搜索和删除规则；
+4. 与 `be-message` 的真实发送前、发送后、已读和撤回回调闭环；
+5. 镜像架构、版本标签及 `managed-group-v5` 契约标签检查。
+
+验证通过后从 `managed/main` 的明确提交创建带注释标签：
+
+```bash
+git switch managed/main
+git pull --ff-only origin managed/main
+git tag -a v3.8.3-patch.17-managed.1 -m 'OpenIM v3.8.3-patch.17 ComeAllIn managed contract'
+git push origin v3.8.3-patch.17-managed.1
+```
+
+CI 应以该标签构建一次镜像并记录不可变 digest。开发和生产同步同一镜像 manifest；回滚使用上一条已验证的托管标签和 digest，不重写旧标签，也不从旧版本化发布分支重新构建。
+
+---
+
 <p align="center">
     <a href="https://openim.io">
         <img src="./assets/logo-gif/openim-logo.gif" width="60%" height="30%"/>
