@@ -62,6 +62,17 @@ Linux capabilities 以及 `no-new-privileges` 条件下通过 `-h` 启动检查�
 隔离编排已按计划清理，本记录不把该静态与包级验证表述为完整端到端验收；后续必须重建
 隔离依赖并重跑“群消息发送 → 作者撤回 → 邀请新成员”的真实 REST 用例。
 
+### 后续 REST 回归（2026-09-19）
+
+已使用上述 12 个 `managed.6-groupmaxseq.1-local` 候选镜像重建独立 MongoDB、Redis、
+Kafka、etcd 和 MinIO 环境。真实 REST 探针已通过“建群 → 群消息发送 → 作者撤回 → 管理入口
+邀请新成员 → 成员列表回读”；`ArgsError: maxSeq is invalid` 未再出现。
+
+同一环境中，`be-message` 的
+`TestClientAgainstPinnedOpenIM` 原生 API 回归、有效用户 Token 的 Gateway WebSocket `101`
+握手、12 个服务逐个重启后的恢复，以及 Redis 重启后的回归均已通过。完整 Message/Evidence
+回调、附件/S3 和活动传输故障用例不属于本次协议修复回归，仍须按部署仓库验证计划单独完成。
+
 ## 发布限制
 
 1. 本补丁不改变 `OPENIM_RELEASE`、`OPENIM_SOURCE_REVISION` 或
