@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
@@ -33,12 +34,12 @@ type multiLoginConfig struct {
 type authDatabase struct {
 	cache        cache.TokenModel
 	accessSecret string
-	accessExpire int64
+	accessExpire time.Duration
 	multiLogin   multiLoginConfig
 	adminUserIDs []string
 }
 
-func NewAuthDatabase(cache cache.TokenModel, accessSecret string, accessExpire int64, multiLogin config.MultiLogin, adminUserIDs []string) AuthDatabase {
+func NewAuthDatabase(cache cache.TokenModel, accessSecret string, accessExpire time.Duration, multiLogin config.MultiLogin, adminUserIDs []string) AuthDatabase {
 	return &authDatabase{cache: cache, accessSecret: accessSecret, accessExpire: accessExpire, multiLogin: multiLoginConfig{
 		Policy:       multiLogin.Policy,
 		MaxNumOneEnd: multiLogin.MaxNumOneEnd,
@@ -107,7 +108,15 @@ func (a *authDatabase) CreateToken(ctx context.Context, userID string, platformI
 		}
 	}
 
-	claims := tokenverify.BuildClaims(userID, platformID, a.accessExpire)
+	claims := tokenverify.Claims{
+		UserID:     userID,
+		PlatformID: platformID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.accessExpire)),
+			// 保留上游五秒签发时钟偏移，避免节点轻微时钟偏差造成刚签发即不可用。
+			IssuedAt: jwt.NewNumericDate(time.Now().Add(-5 * time.Second)),
+		},
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(a.accessSecret))
 	if err != nil {

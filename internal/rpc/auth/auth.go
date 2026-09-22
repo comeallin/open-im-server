@@ -17,6 +17,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcli"
 
@@ -46,6 +47,7 @@ type authServer struct {
 	RegisterCenter discovery.SvcDiscoveryRegistry
 	config         *Config
 	userClient     *rpcli.UserClient
+	tokenTTL       time.Duration
 }
 
 type Config struct {
@@ -56,6 +58,10 @@ type Config struct {
 }
 
 func Start(ctx context.Context, config *Config, client discovery.SvcDiscoveryRegistry, server *grpc.Server) error {
+	tokenTTL, err := config.RpcConfig.TokenPolicy.Duration()
+	if err != nil {
+		return err
+	}
 	rdb, err := redisutil.NewRedisClient(ctx, config.RedisConfig.Build())
 	if err != nil {
 		return err
@@ -67,14 +73,15 @@ func Start(ctx context.Context, config *Config, client discovery.SvcDiscoveryReg
 	pbauth.RegisterAuthServer(server, &authServer{
 		RegisterCenter: client,
 		authDatabase: controller.NewAuthDatabase(
-			redis2.NewTokenCacheModel(rdb, config.RpcConfig.TokenPolicy.Expire),
+			redis2.NewTokenCacheModel(rdb, tokenTTL),
 			config.Share.Secret,
-			config.RpcConfig.TokenPolicy.Expire,
+			tokenTTL,
 			config.Share.MultiLogin,
 			config.Share.IMAdminUserID,
 		),
 		config:     config,
 		userClient: rpcli.NewUserClient(userConn),
+		tokenTTL:   tokenTTL,
 	})
 	return nil
 }
@@ -101,7 +108,7 @@ func (s *authServer) GetAdminToken(ctx context.Context, req *pbauth.GetAdminToke
 
 	prommetrics.UserLoginCounter.Inc()
 	resp.Token = token
-	resp.ExpireTimeSeconds = s.config.RpcConfig.TokenPolicy.Expire * 24 * 60 * 60
+	resp.ExpireTimeSeconds = int64(s.tokenTTL / time.Second)
 	return &resp, nil
 }
 
@@ -131,7 +138,7 @@ func (s *authServer) GetUserToken(ctx context.Context, req *pbauth.GetUserTokenR
 		return nil, err
 	}
 	resp.Token = token
-	resp.ExpireTimeSeconds = s.config.RpcConfig.TokenPolicy.Expire * 24 * 60 * 60
+	resp.ExpireTimeSeconds = int64(s.tokenTTL / time.Second)
 	return &resp, nil
 }
 

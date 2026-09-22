@@ -17,5 +17,7 @@ prometheus:
   ports: [ 12200 ]
 
 tokenPolicy:
-  # Token validity period, in days
+  # Legacy fallback validity period, in days. expireSeconds takes precedence.
   expire: 90
+  # Client token validity period, in seconds.
+  expireSeconds: 900

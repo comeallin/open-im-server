@@ -15,6 +15,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -236,6 +237,29 @@ type Push struct {
 	FullUserCache bool `mapstructure:"fullUserCache"`
 }
 
+type TokenPolicy struct {
+	// Expire 保留上游按天配置的兼容语义；设置 ExpireSeconds 时不再使用它。
+	Expire int64 `mapstructure:"expire"`
+	// ExpireSeconds 以秒精确指定令牌有效期，用于短期客户端令牌。
+	ExpireSeconds int64 `mapstructure:"expireSeconds"`
+}
+
+func (p TokenPolicy) Duration() (time.Duration, error) {
+	if p.ExpireSeconds > 0 {
+		if p.ExpireSeconds > int64((1<<63-1)/int64(time.Second)) {
+			return 0, errors.New("auth token policy expireSeconds exceeds duration range")
+		}
+		return time.Duration(p.ExpireSeconds) * time.Second, nil
+	}
+	if p.Expire > 0 {
+		if p.Expire > int64((1<<63-1)/(24*int64(time.Hour))) {
+			return 0, errors.New("auth token policy expire exceeds duration range")
+		}
+		return time.Duration(p.Expire) * 24 * time.Hour, nil
+	}
+	return 0, errors.New("auth token policy requires a positive expireSeconds or expire")
+}
+
 type Auth struct {
 	RPC struct {
 		RegisterIP   string `mapstructure:"registerIP"`
@@ -243,10 +267,8 @@ type Auth struct {
 		AutoSetPorts bool   `mapstructure:"autoSetPorts"`
 		Ports        []int  `mapstructure:"ports"`
 	} `mapstructure:"rpc"`
-	Prometheus  Prometheus `mapstructure:"prometheus"`
-	TokenPolicy struct {
-		Expire int64 `mapstructure:"expire"`
-	} `mapstructure:"tokenPolicy"`
+	Prometheus  Prometheus  `mapstructure:"prometheus"`
+	TokenPolicy TokenPolicy `mapstructure:"tokenPolicy"`
 }
 
 type Conversation struct {

@@ -17,10 +17,8 @@ type tokenCache struct {
 	accessExpire time.Duration
 }
 
-func NewTokenCacheModel(rdb redis.UniversalClient, accessExpire int64) cache.TokenModel {
-	c := &tokenCache{rdb: rdb}
-	c.accessExpire = c.getExpireTime(accessExpire)
-	return c
+func NewTokenCacheModel(rdb redis.UniversalClient, accessExpire time.Duration) cache.TokenModel {
+	return &tokenCache{rdb: rdb, accessExpire: accessExpire}
 }
 
 func (c *tokenCache) SetTokenFlag(ctx context.Context, userID string, platformID int, token string, flag int) error {
@@ -114,8 +112,4 @@ func (c *tokenCache) BatchSetTokenMapByUidPid(ctx context.Context, tokens map[st
 
 func (c *tokenCache) DeleteTokenByUidPid(ctx context.Context, userID string, platformID int, fields []string) error {
 	return errs.Wrap(c.rdb.HDel(ctx, cachekey.GetTokenKey(userID, platformID), fields...).Err())
-}
-
-func (c *tokenCache) getExpireTime(t int64) time.Duration {
-	return time.Hour * 24 * time.Duration(t)
 }
