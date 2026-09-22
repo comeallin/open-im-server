@@ -36,13 +36,16 @@ LABEL org.opencontainers.image.source="https://github.com/comeallin/open-im-serv
       com.comeallin.openim.contract="${OPENIM_CONTRACT}" \
       com.comeallin.openim.service="${OPENIM_SERVICE}"
 
-RUN apk add --no-cache ca-certificates tzdata && \
-    addgroup -S -g 65532 openim && \
+# 运行阶段不依赖 apk 联网；CA 证书和 Go 时区包均来自已锁定的构建镜像。
+RUN addgroup -S -g 65532 openim && \
     adduser -S -D -H -u 65532 -G openim openim && \
     install -d -o 65532 -g 65532 /openim-server/config
 
 WORKDIR /openim-server
 COPY --from=builder /out/openim-service /usr/local/bin/openim-service
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /usr/local/share/zoneinfo.zip
+ENV ZONEINFO=/usr/local/share/zoneinfo.zip
 
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/openim-service"]
