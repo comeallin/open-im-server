@@ -4,13 +4,7 @@
 
 ### 当前基线
 
-| 项目 | 当前值 |
-| --- | --- |
-| 官方源码基线 | `v3.8.3-patch.16` / `f6411a8` |
-| ComeAllIn 基线分支 | `managed/main` |
-| 当前托管提交 | `b5f117f` |
-| 当前发布标签 | `v3.8.3-patch.16-managed.5` |
-| 镜像契约 | `com.comeallin.openim.contract=managed-group-v5` |
+`managed/main` 是 ComeAllIn 长期基线。当前批准的官方版本、托管 release、源码提交、镜像契约、构建基础镜像和 Registry digest 只在 [`be-message/deploy/openim-release.env`](https://github.com/comeallin/be-message/blob/main/deploy/openim-release.env)维护；本 README 不复制当前值，避免两个仓库的文档独立漂移。
 
 官方基线之上的定制提交按依赖顺序维护：
 
@@ -54,14 +48,14 @@ git switch -c <type>/<change-name>
 
 ### 合并官方修复
 
-普通升级固定到明确的官方 tag，不直接合并浮动的 `upstream/main`。例如升级到 `v3.8.3-patch.17`：
+普通升级固定到明确的官方 tag，不直接合并浮动的 `upstream/main`。以下命令中的 `<upstream-tag>` 必须替换为经过评审的明确 tag：
 
 ```bash
 git fetch upstream --tags
 git switch managed/main
 git pull --ff-only origin managed/main
-git switch -c upgrade/v3.8.3-patch.17
-git merge --no-ff v3.8.3-patch.17
+git switch -c upgrade/<upstream-tag>
+git merge --no-ff <upstream-tag>
 ```
 
 解决冲突后必须保留 merge commit，使 Git 历史同时记录旧托管基线和新官方基线。只有单个、边界明确且不能等待版本升级的官方安全或缺陷修复，才允许在升级分支 `cherry-pick <upstream-commit>`；仍须通过 PR 合并到 `managed/main` 并记录官方提交 SHA。
@@ -85,18 +79,18 @@ git merge --no-ff v3.8.3-patch.17
 2. 读位点、撤回和 Webhook 配置回归测试；
 3. 使用普通用户 Token 直接访问 HTTP/WSS 的旁路测试，确认不能绕过群管理、历史、撤回、搜索和删除规则；
 4. 与 `be-message` 的真实发送前、发送后、已读和撤回回调闭环；
-5. 镜像架构、版本标签及 `managed-group-v5` 契约标签检查。
+5. 镜像架构、版本标签及当前契约标签检查。
 
 验证通过后从 `managed/main` 的明确提交创建带注释标签：
 
 ```bash
 git switch managed/main
 git pull --ff-only origin managed/main
-git tag -a v3.8.3-patch.17-managed.1 -m 'OpenIM v3.8.3-patch.17 ComeAllIn managed contract'
-git push origin v3.8.3-patch.17-managed.1
+git tag -a <managed-release> -m 'OpenIM ComeAllIn managed contract'
+git push origin <managed-release>
 ```
 
-CI 应以该标签构建一次镜像并记录不可变 digest。开发和生产同步同一镜像 manifest；回滚使用上一条已验证的托管标签和 digest，不重写旧标签，也不从旧版本化发布分支重新构建。
+CI 应以该标签从 `Dockerfile.service` 分别构建服务镜像并记录每个不可变 digest。`scripts/openim-service-image.sh` 是服务白名单和本地构建入口，发布版本、提交、契约、平台与基础镜像从上述唯一事实源读取；镜像不包含源码默认配置，以固定非 root 身份运行。开发和生产同步同一组镜像 manifest；回滚使用上一组已验证的托管标签和 digest，不重写旧标签，也不从旧版本化发布分支重新构建。根目录 `Dockerfile` 生成的全量镜像仅用于本地 Compose 联调，不得推送为 EKS 发布产物。
 
 ---
 

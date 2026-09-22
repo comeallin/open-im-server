@@ -64,3 +64,8 @@ Users should pay particular attention to:
 
 - [Docker Installation](https://github.com/openimsdk/open-im-server/blob/main/docs/contrib/install-docker.md) - Necessary if you're planning to use Docker images of OpenIM.
 - [Docker Image Strategy](https://github.com/openimsdk/open-im-server/blob/main/docs/contrib/images.md) - To understand the different images available and how to choose the right one for your architecture.
+
+## ComeAI Fork 部署
+
+- [OpenIM Edge 单域名入口](deployment/openim-edge.md) - ComeAI 开发环境使用单域名 HTTPS/WSS 接入 OpenIM 的反向代理约束。
+- [OpenIM Edge 镜像基线](maintenance/openim-edge-image-baseline-2026-09-20.md) - ECR 镜像来源、扫描门禁与拒绝候选记录。

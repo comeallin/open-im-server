@@ -1,6 +1,7 @@
-ARG GO_IMAGE=golang:1.25-alpine
+ARG GO_IMAGE=scratch
+ARG RUNTIME_IMAGE=scratch
 
-# v3.8.3-patch.16 的 go.mod 要求 Go 1.25，构建层必须与源码契约一致。
+# 全量镜像只用于本地 Compose 联调；EKS 发布使用 Dockerfile.service。
 FROM ${GO_IMAGE} AS builder
 
 # Define the base directory for the application as an environment variable
@@ -21,34 +22,35 @@ RUN go mod download
 RUN go install github.com/magefile/mage@v1.15.0
 
 # Optionally build your application if needed
-RUN mage build
+RUN RELEASE=true mage build
 
-# 运行阶段保留 Mage 所需的同主版本 Go 工具链。
-FROM ${GO_IMAGE}
+# 将 Magefile 编译为独立启动器，运行镜像无需携带 Go SDK 和模块缓存。
+RUN mage -compile /usr/local/bin/openim-launcher
 
-LABEL org.opencontainers.image.version="v3.8.3-patch.16-managed.5" \
-      com.comeallin.openim.contract="managed-group-v5"
+# 运行阶段只保留 OpenIM 二进制、配置和启动器。
+FROM ${RUNTIME_IMAGE}
+
+ARG OPENIM_VERSION
+ARG OPENIM_REVISION
+ARG OPENIM_CONTRACT
+LABEL org.opencontainers.image.source="https://github.com/comeallin/open-im-server" \
+      org.opencontainers.image.version="${OPENIM_VERSION}" \
+      org.opencontainers.image.revision="${OPENIM_REVISION}" \
+      com.comeallin.openim.contract="${OPENIM_CONTRACT}"
 
 # Install necessary packages, such as bash
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash ca-certificates tzdata
 
 # Set the environment and work directory
 ENV SERVER_DIR=/openim-server
 WORKDIR $SERVER_DIR
 
 
-# Copy the compiled binaries and mage from the builder image to the final image
+# 复制发布模式构建的服务、工具及独立启动器。
 COPY --from=builder $SERVER_DIR/_output $SERVER_DIR/_output
 COPY --from=builder $SERVER_DIR/config $SERVER_DIR/config
-COPY --from=builder /go/bin/mage /usr/local/bin/mage
-COPY --from=builder $SERVER_DIR/magefile_windows.go $SERVER_DIR/
-COPY --from=builder $SERVER_DIR/magefile_unix.go $SERVER_DIR/
-COPY --from=builder $SERVER_DIR/magefile.go $SERVER_DIR/
+COPY --from=builder /usr/local/bin/openim-launcher /usr/local/bin/openim-launcher
 COPY --from=builder $SERVER_DIR/start-config.yml $SERVER_DIR/
-COPY --from=builder $SERVER_DIR/go.mod $SERVER_DIR/
-COPY --from=builder $SERVER_DIR/go.sum $SERVER_DIR/
 
-RUN go get github.com/openimsdk/gomake@v0.0.15-alpha.5
-
-# Set the command to run when the container starts
-ENTRYPOINT ["sh", "-c", "mage start && tail -f /dev/null"]
+# OpenIM 内部依赖通过容器服务名直连，运行期不得继承镜像构建代理。
+ENTRYPOINT ["sh", "-c", "unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; openim-launcher start && tail -f /dev/null"]

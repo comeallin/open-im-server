@@ -1,0 +1,49 @@
+ARG GO_IMAGE=scratch
+ARG RUNTIME_IMAGE=scratch
+
+FROM ${GO_IMAGE} AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+
+ARG OPENIM_SERVICE
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+# 服务名由外层构建脚本白名单校验；RPC 与其他服务映射到各自明确的 main package。
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    case "$OPENIM_SERVICE" in \
+      openim-rpc-*) service_path="./cmd/openim-rpc/$OPENIM_SERVICE" ;; \
+      openim-*) service_path="./cmd/$OPENIM_SERVICE" ;; \
+      *) echo "不支持的 OpenIM 服务: $OPENIM_SERVICE" >&2; exit 2 ;; \
+    esac && \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+      go build -trimpath -ldflags="-s -w" -o /out/openim-service "$service_path"
+
+FROM ${RUNTIME_IMAGE}
+
+ARG OPENIM_SERVICE
+ARG OPENIM_VERSION
+ARG OPENIM_REVISION
+ARG OPENIM_CONTRACT
+LABEL org.opencontainers.image.source="https://github.com/comeallin/open-im-server" \
+      org.opencontainers.image.version="${OPENIM_VERSION}" \
+      org.opencontainers.image.revision="${OPENIM_REVISION}" \
+      com.comeallin.openim.contract="${OPENIM_CONTRACT}" \
+      com.comeallin.openim.service="${OPENIM_SERVICE}"
+
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -S -g 65532 openim && \
+    adduser -S -D -H -u 65532 -G openim openim && \
+    install -d -o 65532 -g 65532 /openim-server/config
+
+WORKDIR /openim-server
+COPY --from=builder /out/openim-service /usr/local/bin/openim-service
+
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/openim-service"]
+CMD ["-c", "/openim-server/config/"]

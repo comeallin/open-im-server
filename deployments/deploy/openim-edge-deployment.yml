@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openim-edge
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openim-edge-config
+  labels:
+    app.kubernetes.io/name: openim-edge
+    app.kubernetes.io/part-of: open-im
+data:
+  nginx.conf: |
+    # 该边缘代理复用一个域名，以官方路径分别转发 OpenIM HTTP API 和 WebSocket。
+    worker_processes auto;
+    error_log /dev/stderr warn;
+    pid /tmp/nginx.pid;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      access_log /dev/stdout;
+      server_tokens off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+
+      server {
+        listen 8080;
+        server_name _;
+
+        location = /healthz {
+          default_type text/plain;
+          return 200 "ok\n";
+        }
+
+        # NLB 在 443 终止 TLS；此处固定向 OpenIM 声明原始访问协议为 HTTPS。
+        location ^~ /api/ {
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Request-Api https://$host/api;
+          proxy_pass http://openim-api:10002/;
+        }
+
+        # OpenIM Message Gateway 在根路径处理连接；尾部斜杠会剥离 /msg_gateway 前缀。
+        location /msg_gateway {
+          # OpenIM SDK 将短期 JWT 放在 WebSocket 查询参数；禁止将其写入访问日志。
+          access_log off;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "Upgrade";
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_read_timeout 90s;
+          proxy_send_timeout 90s;
+          proxy_pass http://openim-msggateway:10001/;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openim-edge
+  labels:
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/name: openim-edge
+    app.kubernetes.io/part-of: open-im
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openim-edge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: edge
+        app.kubernetes.io/name: openim-edge
+        app.kubernetes.io/part-of: open-im
+    spec:
+      serviceAccountName: openim-edge
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 101
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: openim-edge
+          # ComeAI 开发环境只使用组织 ECR 的不可变 digest，禁止改为公共镜像或浮动标签。
+          image: 343575638603.dkr.ecr.us-west-2.amazonaws.com/openim-edge@sha256:9bb88ccbc19c816e7df3d1b6a39e44f180df1359c46df8e15874add103857151
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080, protocol: TCP}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts:
+            - {name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: config, configMap: {name: openim-edge-config}}
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openim-edge
+  labels:
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/name: openim-edge
+    app.kubernetes.io/part-of: open-im
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: openim-edge
+  ports:
+    - {name: http, port: 8080, targetPort: http, protocol: TCP}
