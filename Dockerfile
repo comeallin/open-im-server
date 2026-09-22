@@ -16,16 +16,15 @@ WORKDIR $SERVER_DIR
 # Copy all files from the current directory into the container
 COPY . .
 
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-# Install Mage to use for building the application
-RUN go install github.com/magefile/mage@v1.15.0
-
-# Optionally build your application if needed
-RUN RELEASE=true mage build
-
-# 将 Magefile 编译为独立启动器，运行镜像无需携带 Go SDK 和模块缓存。
-RUN mage -compile /usr/local/bin/openim-launcher
+# 构建和启动器只依赖 go.mod 已锁定的 gomake，避免运行时临时下载 Mage。
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -o /usr/local/bin/openim-release-runner ./build/openim-release-runner
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    RELEASE=true /usr/local/bin/openim-release-runner build
 
 # 运行阶段只保留 OpenIM 二进制、配置和启动器。
 FROM ${RUNTIME_IMAGE}
@@ -38,19 +37,19 @@ LABEL org.opencontainers.image.source="https://github.com/comeallin/open-im-serv
       org.opencontainers.image.revision="${OPENIM_REVISION}" \
       com.comeallin.openim.contract="${OPENIM_CONTRACT}"
 
-# Install necessary packages, such as bash
-RUN apk add --no-cache bash ca-certificates tzdata
-
 # Set the environment and work directory
 ENV SERVER_DIR=/openim-server
+ENV ZONEINFO=/usr/local/share/zoneinfo.zip
 WORKDIR $SERVER_DIR
 
 
 # 复制发布模式构建的服务、工具及独立启动器。
 COPY --from=builder $SERVER_DIR/_output $SERVER_DIR/_output
 COPY --from=builder $SERVER_DIR/config $SERVER_DIR/config
-COPY --from=builder /usr/local/bin/openim-launcher /usr/local/bin/openim-launcher
+COPY --from=builder /usr/local/bin/openim-release-runner /usr/local/bin/openim-release-runner
 COPY --from=builder $SERVER_DIR/start-config.yml $SERVER_DIR/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /usr/local/share/zoneinfo.zip
 
 # OpenIM 内部依赖通过容器服务名直连，运行期不得继承镜像构建代理。
-ENTRYPOINT ["sh", "-c", "unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; openim-launcher start && tail -f /dev/null"]
+ENTRYPOINT ["sh", "-c", "unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; openim-release-runner start && tail -f /dev/null"]
