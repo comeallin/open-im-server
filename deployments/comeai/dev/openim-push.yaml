@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openim-push
+  namespace: open-im
+  labels:
+    app.kubernetes.io/name: openim-push
+    app.kubernetes.io/component: push
+    app.kubernetes.io/part-of: open-im
+    environment: dev
+    project: comeai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openim-push
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openim-push
+        app.kubernetes.io/component: push
+        app.kubernetes.io/part-of: open-im
+        environment: dev
+        project: comeai
+    spec:
+      serviceAccountName: openim-runtime
+      nodeSelector:
+        workload: open-im
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: open-im
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: render-config
+          image: 343575638603.dkr.ecr.us-west-2.amazonaws.com/openim-push@sha256:88eb049097339108b5b18af0e843e13017c21f3e928666910de0ff71eee5eabe
+          command: [/bin/sh, /renderer/render.sh]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+              readOnly: true
+            - name: config-rendered
+              mountPath: /config-rendered
+            - name: renderer
+              mountPath: /renderer
+              readOnly: true
+            - name: shared-data-secret
+              mountPath: /shared-data-secret
+              readOnly: true
+            - name: local-secret
+              mountPath: /local-secret
+              readOnly: true
+      containers:
+        - name: openim-push
+          image: 343575638603.dkr.ecr.us-west-2.amazonaws.com/openim-push@sha256:88eb049097339108b5b18af0e843e13017c21f3e928666910de0ff71eee5eabe
+          ports:
+            - name: rpc
+              containerPort: 10170
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: rpc
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            tcpSocket:
+              port: rpc
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: rpc
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 350m
+              memory: 512Mi
+          volumeMounts:
+            - name: config-rendered
+              mountPath: /openim-server/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config-source
+          configMap:
+            name: openim-runtime-config
+        - name: config-rendered
+          emptyDir: {}
+        - name: renderer
+          configMap:
+            name: openim-runtime-renderer
+            defaultMode: 365
+        - name: shared-data-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: openim-shared-data-credentials
+        - name: local-secret
+          secret:
+            secretName: openim-runtime-local
+        - name: tmp
+          emptyDir: {}
