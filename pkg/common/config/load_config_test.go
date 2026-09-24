@@ -48,8 +48,7 @@ func TestLoadOpenIMRpcUserConfig(t *testing.T) {
 	assert.Nil(t, err)
 	//export IMENV_OPENIM_RPC_USER_RPC_LISTENIP="0.0.0.0"
 	assert.Equal(t, "0.0.0.0", user.RPC.ListenIP)
-	//export IMENV_OPENIM_RPC_USER_RPC_PORTS="10110,10111,10112"
-	assert.Equal(t, []int{10110, 10111, 10112}, user.RPC.Ports)
+	assert.Equal(t, []int{10320}, user.RPC.Ports)
 }
 
 func TestLoadNotificationConfig(t *testing.T) {
@@ -63,16 +62,15 @@ func TestLoadOpenIMThirdConfig(t *testing.T) {
 	var third Third
 	err := LoadConfig("../../../config/openim-rpc-third.yml", "IMENV_OPENIM_RPC_THIRD", &third)
 	assert.Nil(t, err)
-	assert.Equal(t, "enabled", third.Object.Enable)
+	// 示例配置使用 MinIO；OSS 字段不得把旧示例凭据误认为当前配置。
+	assert.Equal(t, "minio", third.Object.Enable)
 	assert.Equal(t, "https://oss-cn-chengdu.aliyuncs.com", third.Object.Oss.Endpoint)
-	assert.Equal(t, "my_bucket_name", third.Object.Oss.Bucket)
-	assert.Equal(t, "https://my_bucket_name.oss-cn-chengdu.aliyuncs.com", third.Object.Oss.BucketURL)
-	assert.Equal(t, "AKID1234567890", third.Object.Oss.AccessKeyID)
-	assert.Equal(t, "abc123xyz789", third.Object.Oss.AccessKeySecret)
-	assert.Equal(t, "session_token_value", third.Object.Oss.SessionToken) // Uncomment if session token is needed
-	assert.Equal(t, true, third.Object.Oss.PublicRead)
-
-	// Environment: IMENV_OPENIM_RPC_THIRD_OBJECT_ENABLE=enabled;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_ENDPOINT=https://oss-cn-chengdu.aliyuncs.com;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_BUCKET=my_bucket_name;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_BUCKETURL=https://my_bucket_name.oss-cn-chengdu.aliyuncs.com;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_ACCESSKEYID=AKID1234567890;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_ACCESSKEYSECRET=abc123xyz789;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_SESSIONTOKEN=session_token_value;IMENV_OPENIM_RPC_THIRD_OBJECT_OSS_PUBLICREAD=true
+	assert.Equal(t, "demo-9999999", third.Object.Oss.Bucket)
+	assert.Equal(t, "https://demo-9999999.oss-cn-chengdu.aliyuncs.com", third.Object.Oss.BucketURL)
+	assert.Empty(t, third.Object.Oss.AccessKeyID)
+	assert.Empty(t, third.Object.Oss.AccessKeySecret)
+	assert.Empty(t, third.Object.Oss.SessionToken)
+	assert.False(t, third.Object.Oss.PublicRead)
 }
 
 func TestTransferConfig(t *testing.T) {

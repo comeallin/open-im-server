@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例依赖固定的外部 Redis 和 MongoDB，默认测试不应访问这些地址。
 package redis
 
 import (

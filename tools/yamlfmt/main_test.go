@@ -17,7 +17,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"reflect"
 	"testing"
 
 	"github.com/likexian/gokit/assert"
@@ -53,56 +52,26 @@ labels:
 }
 
 func Test_fetchYaml(t *testing.T) {
-	type args struct {
-		sourceYaml []byte
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *yaml.Node
-		wantErr bool
-	}{
-		{
-			name: "Valid YAML",
-			args: args{sourceYaml: []byte("key: value")},
-			want: &yaml.Node{
-				Kind:  yaml.MappingNode,
-				Tag:   "!!map",
-				Value: "",
-				Content: []*yaml.Node{
-					{
-						Kind:  yaml.ScalarNode,
-						Tag:   "!!str",
-						Value: "key",
-					},
-					{
-						Kind:  yaml.ScalarNode,
-						Tag:   "!!str",
-						Value: "value",
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:    "Invalid YAML",
-			args:    args{sourceYaml: []byte("key:")},
-			want:    nil,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := fetchYaml(tt.args.sourceYaml)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("fetchYaml() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("fetchYaml() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	t.Run("Valid YAML", func(t *testing.T) {
+		got, err := fetchYaml([]byte("key: value"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// yaml.v3 返回文档节点，映射及其键值位于下一层。
+		if got.Kind != yaml.DocumentNode || len(got.Content) != 1 {
+			t.Fatalf("unexpected YAML document: %+v", got)
+		}
+		mapping := got.Content[0]
+		if mapping.Kind != yaml.MappingNode || len(mapping.Content) != 2 || mapping.Content[0].Value != "key" || mapping.Content[1].Value != "value" {
+			t.Fatalf("unexpected YAML mapping: %+v", mapping)
+		}
+	})
+	t.Run("Invalid YAML", func(t *testing.T) {
+		// "key:" 是合法的 null 值；未闭合的序列才是语法错误。
+		if _, err := fetchYaml([]byte("key: [")); err == nil {
+			t.Fatal("expected invalid YAML to be rejected")
+		}
+	})
 }
 
 func Test_streamYaml(t *testing.T) {

@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例会向固定的外部 MongoDB 大量写入数据，不能作为默认单元测试运行。
 package mgo
 
 import (

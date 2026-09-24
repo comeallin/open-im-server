@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工压力用例依赖固定的本地 Redis/MongoDB，并包含持续写入循环。
 package redis
 
 import (

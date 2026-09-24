@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例会连接外部服务并执行清理任务，不能作为默认单元测试运行。
 package tools
 
 import (
@@ -23,7 +26,7 @@ func TestName(t *testing.T) {
 			Address:       []string{"localhost:12379"},
 		},
 	}
-	client, err := kdisc.NewDiscoveryRegister(conf, "source")
+	client, err := kdisc.NewDiscoveryRegister(conf, &config.Share{}, nil)
 	if err != nil {
 		panic(err)
 	}

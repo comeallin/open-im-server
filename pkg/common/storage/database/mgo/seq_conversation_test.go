@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例依赖固定的外部 MongoDB，默认测试不应访问该地址。
 package mgo
 
 import (

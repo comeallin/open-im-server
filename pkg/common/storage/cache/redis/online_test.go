@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例依赖固定的外部 Redis，默认测试不应访问该地址。
 package redis
 
 import (
@@ -26,8 +29,8 @@ func TestName111111(t *testing.T) {
 			"172.16.8.124:7005",
 			"172.16.8.124:7006",
 		},
-		ClusterMode: true,
-		Password:    "passwd123",
+		RedisMode: "cluster",
+		Password:  "passwd123",
 		//Address:  []string{"localhost:16379"},
 		//Password: "openIM123",
 	}

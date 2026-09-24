@@ -1,3 +1,6 @@
+//go:build openim_manual
+
+// 手工用例连接固定的外部服务，且包含持续运行的订阅与写入循环。
 package redis
 
 import (
