@@ -27,12 +27,16 @@ func TestLoadWebhooksConfig(t *testing.T) {
 	assert.Equal(t, "http://message-api:8080/internal/v1/openim", webhooks.URL)
 	assert.True(t, webhooks.BeforeSendSingleMsg.Enable)
 	assert.False(t, webhooks.BeforeSendSingleMsg.FailedContinue)
-	assert.Equal(t, []string{"101", "110"}, webhooks.BeforeSendSingleMsg.AllowedTypes)
+	// 原生图片、文件与兼容自定义消息都必须经过发送前准入，并在发送后回传绑定结果。
+	messageTypes := []string{"101", "102", "105", "110"}
+	assert.Equal(t, messageTypes, webhooks.BeforeSendSingleMsg.AllowedTypes)
 	assert.True(t, webhooks.AfterSendSingleMsg.Enable)
+	assert.Equal(t, messageTypes, webhooks.AfterSendSingleMsg.AllowedTypes)
 	assert.True(t, webhooks.BeforeSendGroupMsg.Enable)
 	assert.False(t, webhooks.BeforeSendGroupMsg.FailedContinue)
-	assert.Equal(t, []string{"101", "110"}, webhooks.BeforeSendGroupMsg.AllowedTypes)
+	assert.Equal(t, messageTypes, webhooks.BeforeSendGroupMsg.AllowedTypes)
 	assert.True(t, webhooks.AfterSendGroupMsg.Enable)
+	assert.Equal(t, messageTypes, webhooks.AfterSendGroupMsg.AllowedTypes)
 	assert.True(t, webhooks.AfterSingleMsgRead.Enable)
 	assert.True(t, webhooks.AfterGroupMsgRead.Enable)
 	assert.True(t, webhooks.AfterRevokeMsg.Enable)
