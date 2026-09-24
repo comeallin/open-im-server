@@ -5,3 +5,4 @@ resources:
   - resourcequota.yaml
   - openim-rpc-group.yaml
   - openim-push.yaml
+  - openim-message-webhook-egress.yaml

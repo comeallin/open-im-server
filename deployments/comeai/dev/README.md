@@ -1,6 +1,6 @@
 # ComeAI 开发环境 OpenIM 补齐清单
 
-本目录记录 `comeai-dev` EKS 集群、`open-im` Namespace 中缺失的 Group RPC 与 Push 工作负载，并记录为容纳它们所需的 Namespace CPU ResourceQuota。它不接管已经运行的 OpenIM 服务、ConfigMap 或 Secret。当前命名空间以集群实际状态为准；旧部署文档中的 `openim-system` 不是本次发布目标。
+本目录记录 `comeai-dev` EKS 集群、`open-im` Namespace 中缺失的 Group RPC、Push 工作负载和 Message Webhook 精确出站规则，并记录为容纳它们所需的 Namespace CPU ResourceQuota。它不接管已经运行的 OpenIM 服务、ConfigMap 或 Secret。当前命名空间以集群实际状态为准；旧部署文档中的 `openim-system` 不是本次发布目标。
 
 镜像使用 `be-message` 的 [OpenIM 发布身份](https://github.com/comeallin/be-message/blob/main/deploy/openim-release.env)与 [服务镜像摘要锁定文件](https://github.com/comeallin/be-message/blob/main/deploy/openim-images.lock)登记的 ComeAllIn release。清单固定不可变 digest；更新 release 时须一起核对镜像的 `org.opencontainers.image.revision`、`org.opencontainers.image.version`、`com.comeallin.openim.contract` 标签。
 
@@ -56,3 +56,14 @@ kubectl -n open-im get pods -l app.kubernetes.io/name=openim-push
 SIT 双账号 A、B 保持页面在线时，A→B 和 B→A 的消息都在接收方**未刷新**时出现；双方刷新后历史各保留一份。两侧 `get_incremental_join_groups` POST 均返回 HTTP 200，原先观察到的 499 本次未复现。测试消息前缀为 `[IM-PUSH-TEST]`，账号密码保存在前端本地忽略文档，不进入本目录。
 
 将 Push 的第三方离线通知提供方从无凭据的 `geTui` 改为 `dummy` 并重启后，又发送 `[IM-PUSH-TEST] post-config A-to-B`。B 仍在未刷新时收到；Push 日志只有首次使用 `dummy` 的提示，没有 `appid is invalid` 或 `offlinePushMsg failed`。这项配置仅关闭未配置的第三方移动通知，Web 离线消息仍通过历史同步补拉。
+
+## Message 附件 Webhook 实际部署（2026-09-24，comeai-dev）
+
+| 对象 | 配置与结果 |
+| --- | --- |
+| `open-im/openim-runtime-config` | `webhooks.yml` 使用 `http://message-api.comeai.svc.cluster.local:8080/internal/v1/openim`；单聊/群聊的发送前和发送后类型均含 `101,102,105,110`。发送前失败继续为 `false`。开发环境完整域名由 AWS 基础设施仓库的 `generate-runtime-config.sh` 在锁定源码配置的临时副本上替换。 |
+| `open-im/openim-runtime-renderer` | 移除将 `webhooks.yml` 重写为 `http://127.0.0.1/disabled` 的旧逻辑；保留锁定源码的回调开关。实际 Pod 内配置经过核对。 |
+| `open-im/openim-rpc-msg-to-message-api` | 本目录 NetworkPolicy 仅允许 `openim-rpc-msg` 出站访问 `comeai` 中 `app=message-api` 的 TCP 8080；开发集群已应用。 |
+| `open-im/openim-rpc-msg` | 只滚动该 Deployment，镜像仍为 `sha256:00090370e488ae1ab3f6ed984567a2208c1242d03a857f0f37de3eb8fa696dc6`；`1/1 Ready`。没有修改 OpenIM Go 源码。 |
+
+用真实 WASM SDK 验证：未准备的 `CustomElem` 和原生 `FileElem` 均被发送前回调以 `16030012` 拒绝；经 File Service 上传、Message 准备的原生文件和图片使用 `sendMessageNotOss` 发送后，Message 绑定转为 `attached`，接收方可取得短期签名链接。`sendMessage` 会进入 OpenIM 自有上传流程，在本场景发送前返回 SDK `10005`，因此不能用于已由 File Service 上传的附件。
